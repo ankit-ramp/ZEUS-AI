@@ -46,11 +46,11 @@ Setup environment variable file.
 `npm install`
 
 - Step4:
-* Development
-    `npm run dev`
-* Production
-    `npm run build`
-    `npm run start`
+    * Development
+        `npm run dev`
+    * Production
+        `npm run build`
+        `npm run start`
 
 
 ### Backend
