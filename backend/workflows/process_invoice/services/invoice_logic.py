@@ -18,7 +18,7 @@ load_dotenv()
 
 
 def load_files(state):
-    folder_path = "../invoice_input"
+    folder_path = os.getenv("INVOICES_INPUT_FOLDER", "backend/workflows/process_invoice/invoice_input")
     files = [f for f in os.listdir(folder_path)]
     current_index_value = state.get("current_index", 0)
     return {
@@ -135,20 +135,17 @@ def flatten_response(state):
     return state
 
 
-
 def save_dataframe_to_excel(state):
-
     rows = state.get("rows", [])
     if not rows:
         print("No rows to save.")
-        return state 
-    
+        return state
+
     df = pd.DataFrame(rows)
     print(df)
 
-    # Define output directory relative to this file
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(base_dir, "../invoice_output")
+    # ✅ Get output directory from environment variable
+    output_dir = os.getenv("INVOICES_OUTPUT_FOLDER", "backend/workflows/process_invoice/invoice_output")
     os.makedirs(output_dir, exist_ok=True)
 
     output_path = os.path.join(output_dir, "output.csv")

@@ -14,60 +14,70 @@ import os
 from sqlalchemy import text
 from process_invoice.services.invoice_logic import load_files
 from process_invoice.services.invoice_graph_instance import graph
+from dotenv import load_dotenv
+load_dotenv()
 
 router = APIRouter()
 
+INPUT_DIR = os.getenv("INVOICES_INPUT_FOLDER", "backend/workflows/process_invoice/invoice_input")
+OUTPUT_DIR = os.getenv("INVOICES_OUTPUT_FOLDER", "backend/workflows/process_invoice/invoice_output")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "output.csv")
+
+def schedule_cleanup(background_tasks: BackgroundTasks, input_files: List[str], output_file: str):
+    for path in input_files:
+        background_tasks.add_task(os.remove, path)
+    background_tasks.add_task(os.remove, output_file)
+
 @router.post("/invoice")
 async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
-    input_dir = "../invoice_input"
-    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(INPUT_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 🔥 Step 1: Clean up leftover files from previous runs
-    for leftover in os.listdir(input_dir):
-        leftover_path = os.path.join(input_dir, leftover)
+    # --- Start of the enhanced cleanup ---
+    # Clean up old input and output files before processing new ones
+    for leftover in os.listdir(INPUT_DIR):
+        leftover_path = os.path.join(INPUT_DIR, leftover)
         if os.path.isfile(leftover_path):
             try:
                 os.remove(leftover_path)
             except Exception as cleanup_error:
-                print(f"Warning: Failed to remove leftover file {leftover_path}: {cleanup_error}")
-
-    # 🔄 Step 2: Save uploaded files
+                print(f"Warning: Failed to remove leftover input file {leftover_path}: {cleanup_error}")
+    
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            os.remove(OUTPUT_FILE)
+            print(f"Removed old output file: {OUTPUT_FILE}")
+        except Exception as cleanup_error:
+            print(f"Warning: Failed to remove old output file {OUTPUT_FILE}: {cleanup_error}")
+    # --- End of the enhanced cleanup ---
+    
     saved_file_paths = []
     for file in files:
-        file_path = os.path.join(input_dir, file.filename)
+        file_path = os.path.join(INPUT_DIR, file.filename)
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
         saved_file_paths.append(file_path)
 
-    # ⚙️ Step 3: Process with graph
     try:
-        initial_state = {"file_list": ''}
         print(graph.get_graph().draw_ascii())
-        result = graph.invoke(initial_state, {"recursion_limit": 3000})
+        result = graph.invoke({"file_list": ''}, {"recursion_limit": 3000})
 
-        output_dir = os.path.join(os.path.dirname(__file__), "../invoice_output")
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, "output.csv")
-        print("Checking if file exists:", output_path)
-        print("Directory listing:", os.listdir(os.path.dirname(output_path)))
-
-        if os.path.exists(output_path):
-            # Schedule cleanup of output and input files
-            background_tasks.add_task(os.remove, output_path)
-            for path in saved_file_paths:
-                background_tasks.add_task(os.remove, path)
+        if os.path.exists(OUTPUT_FILE):
+            # Schedule cleanup only after successful processing
+            schedule_cleanup(background_tasks, saved_file_paths, OUTPUT_FILE)
 
             return FileResponse(
-                path=output_path,
+                path=OUTPUT_FILE,
                 filename="results.csv",
                 media_type="text/csv"
             )
         else:
+            # Clean only inputs, output is not created
             for path in saved_file_paths:
                 background_tasks.add_task(os.remove, path)
             raise HTTPException(status_code=404, detail="Output file not found.")
-        
+
     except Exception as e:
         for path in saved_file_paths:
             background_tasks.add_task(os.remove, path)
