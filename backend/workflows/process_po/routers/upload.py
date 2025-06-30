@@ -9,10 +9,12 @@ import os
 import shutil
 
 router = APIRouter()
+INPUT_DIR = os.getenv("PO_INPUT_FOLDER", "workflows/process_po/po_input")
+OUTPUT_DIR = os.getenv("PO_OUTPUT_FOLDER", "workflows/process_po/po_output")
 
 @router.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...), order_cache=Depends(get_order_cache)):
-    input_folder = "./po_input"
+    input_folder = INPUT_DIR
     os.makedirs(input_folder, exist_ok=True)
 
     # ✅ Clear the input folder before uploading

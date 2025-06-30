@@ -22,6 +22,8 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 db_connector = Connect()
+INPUT_DIR = os.getenv("PO_INPUT_FOLDER", "workflows/process_po/po_input")
+OUTPUT_DIR = os.getenv("PO_OUTPUT_FOLDER", "workflows/process_po/po_output")
 
 def get_gold_db() -> Generator[Engine, None, None]:
     try:
@@ -39,7 +41,7 @@ def get_gold_db() -> Generator[Engine, None, None]:
             engine.dispose()
 
 def load_files(state):
-    folder_path = "po_input"
+    folder_path = INPUT_DIR
     files = [f for f in os.listdir(folder_path)]
     current_index_value = state.get("current_index", 0)
     return {
@@ -151,7 +153,7 @@ def save_dataframe_to_csv(state):
         df['customer_product_code'] = df['customer_product_code'].apply(remove_special_chars)
 
     filename = "output.csv"
-    output_dir = os.path.join(os.getcwd(), "po_output")
+    output_dir = OUTPUT_DIR
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, filename)
 
