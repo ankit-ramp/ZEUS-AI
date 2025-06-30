@@ -42,25 +42,42 @@ A modern full-stack web application built using **FastAPI** (Python) for the bac
 ```
 project-root/
 │
-├── backend/                  # FastAPI backend
-│   ├── main/                 # main file
-│   ├── routes/               # API routes
-│   ├── models/               # pydantic models for llm, langgraph and database
-│   └── services/             # Logic and graph files
-|   └── tools/                # reusable code snippets
+├── .gitignore
+├── README.md
 │
-│
-├── frontend/                 # Next.js frontend
+├── frontend/                      # Next.js frontend
 │   ├── app/ -------├── api  
-                    |── auth 
-                    ├── dashboard  # App pages (React) and routes
-                    |── login   
-│   ├── components/                  # API utils
-│   ├── utils/               # Static assets
-│   ├── tailwind.config.js    #  tailwind config
-│   └── .env.local            # Frontend environment variables
+│   │              ├── auth 
+│   │              ├── dashboard    # App pages (React) and routes
+│   │              └── login   
+│   ├── components/                # Reusable components
+│   ├── utils/                     # Utility functions
+│   ├── tailwind.config.js         # Tailwind CSS config
+│   └── .env.local                 # Frontend environment variables
 │
-└── README.md                 # Project documentation
+├── backend/                       # FastAPI backend
+│   ├── tools/                     # Reusable utilities and helper code
+│   ├── main.py                    # Main entry point for FastAPI
+│   ├── frontend.py                # Possibly handles server-side rendering or SPA fallback
+│   ├── requirements.txt           # Python dependencies
+│   ├── Dockerfile                 # Docker setup
+│   ├── .dockerignore              # Files to ignore in Docker context
+│   │
+│   └── workflows/                 # Workflow-specific backend logic
+│       ├── process_invoice/
+│       │   ├── invoice_input/     # Input handling for invoice workflow
+│       │   ├── invoice_output/    # Output generation for invoice workflow
+│       │   ├── models/            # Pydantic models
+│       │   ├── routes/            # API routes specific to invoice processing
+│       │   └── services/          # Business logic for invoice processing
+│       │
+│       └── process_po/
+│           ├── po_input/          # Input handling for purchase order workflow
+│           ├── po_output/         # Output generation for PO workflow
+│           ├── models/            # Pydantic models
+│           ├── routers/           # API routers (note: routers vs. routes for clarity)
+│           └── services/          # Business logic for PO processing
+
 ```
 
 ---
