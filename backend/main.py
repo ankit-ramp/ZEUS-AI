@@ -7,7 +7,7 @@ import sys
 from typing import Generator
 from typing import List
 from sqlalchemy import text
-from services.po_graph_instance import graph
+from workflows.process_po.services.po_graph_instance import graph
 from fastapi import File, UploadFile
 from fastapi.responses import FileResponse
 import shutil
@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks
 from sqlalchemy.engine import Engine
-from services.logic import get_gold_db
+from workflows.process_po.services.logic import get_gold_db
 from tools.connection import Connect
 
 
@@ -28,7 +28,8 @@ order_cache = []
 def get_order_cache():
     return order_cache
 
-from routers import download, health, upload
+from workflows.process_po.routers import download, health, upload
+from workflows.process_invoice.routes import invoice_upload
 
 
 @asynccontextmanager
@@ -77,4 +78,5 @@ class GraphInput(BaseModel):
 app.include_router(download.router)
 app.include_router(upload.router)
 app.include_router(health.router)
+app.include_router(invoice_upload.router)
 
