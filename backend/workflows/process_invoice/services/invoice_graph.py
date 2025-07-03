@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from process_invoice.models.invoice_graph_schema import SimpleState, InvoiceResponse
-from process_invoice.services.invoice_logic import load_files, process_current_file, file_check, process_pdf, process_html, increment_index, llm_input, check_continue, flatten_response, save_dataframe_to_excel
+from process_invoice.services.invoice_logic import load_files, process_current_file, file_check, process_pdf, process_html, increment_index, llm_input, check_continue, flatten_response, save_dataframe_to_excel, process_word
 
 
 def build_graph() -> StateGraph:
@@ -21,10 +21,12 @@ def build_graph() -> StateGraph:
     builder.add_conditional_edges("process_file", file_check, {
         "pdf": "processPDF",
         "html": "processHTML",
+        "doc": "processWord",
         "other": "increment_index"
     })
 
     builder.add_node("processPDF", process_pdf)
+    builder.add_node("processWord", process_word)
     builder.add_node("processHTML", process_html)
     builder.add_node("excel", save_dataframe_to_excel)
     builder.add_node("LLM", llm_input)
@@ -32,6 +34,8 @@ def build_graph() -> StateGraph:
     builder.add_node("check_continue", check_continue)
 
     builder.add_edge("processHTML", "LLM")
+    builder.add_edge("processWord", "LLM")
+
     builder.add_edge("processPDF", "LLM")
     builder.add_edge("LLM", "flat")
     builder.add_edge("flat", "increment_index")

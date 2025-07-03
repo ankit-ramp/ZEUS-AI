@@ -9,5 +9,7 @@ def check_file_type(file_path):
             return "pdf"
         elif ext in [".html", ".htm"]:
             return "html"
+        elif ext == [".docx", ".doc"]:
+            return "doc"
         else:
             return ext[1:] 

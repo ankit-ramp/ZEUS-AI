@@ -2,6 +2,7 @@ import os
 from tools.check_file_type import check_file_type
 from tools.pdf_to_text import extract_text_from_pdf
 from tools.html_to_text import extract_text_from_html
+from tools.word_to_text import docx_to_text
 from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_google_genai import ChatGoogleGenerativeAI
 from process_invoice.models.invoice_graph_schema import SimpleState, InvoiceResponse
@@ -10,12 +11,56 @@ from process_invoice.services.invoice_prompt import invoice_prompt_template
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 import pandas as pd
+from sqlalchemy import Table, Column, MetaData
+from sqlalchemy.types import String, Integer, Float, DateTime
+from datetime import datetime
+from tools.connection import Connect
 
 import re
 load_dotenv()
 
+def get_invoice_table_schema(table_name: str, metadata: MetaData):
+    return Table(
+        table_name,
+        metadata,
+        Column("product_name", String(255)),
+        Column("product_code", String(255)),
+        Column("product_description", String(255)),
+        Column("product_quantity", Integer),
+        Column("product_unit_price", Float),
+        Column("product_price", Float),
+        Column("vendor_name", String(255)),
+        Column("invoice_number", String(255)),
+        Column("invoice_date", String(255)),  # consider using Date() if always formatted
+        Column("due_date", String(255)),
+        Column("currency", String(10)),
+        Column("net_amount", Float),
+        Column("tax_amount", Float),
+        Column("invoice_amount", Float),
+        Column("file_name", String(255)),
+        Column("inserted_at", DateTime)
+    )
 
+def create_table_if_not_exists_and_insert(df: pd.DataFrame, table_name: str, engine):
+    metadata = MetaData()
+    table = get_invoice_table_schema(table_name, metadata)
 
+    # Add inserted_at if not present
+    if "inserted_at" not in df.columns:
+        df["inserted_at"] = datetime.now()
+
+    # Reorder/match columns exactly as defined
+    df = df[[col.name for col in table.columns]]
+
+    # Create table if it doesn't exist
+    metadata.create_all(engine, checkfirst=True)
+
+    # Insert into table
+    try:
+        df.to_sql(table_name, con=engine, if_exists='append', index=False)
+        print(f"Inserted {len(df)} rows into '{table_name}' table.")
+    except Exception as e:
+        print(f"Failed to insert data: {e}")
 
 def load_files(state):
     folder_path = os.getenv("INVOICES_INPUT_FOLDER", "backend/workflows/process_invoice/invoice_input")
@@ -45,6 +90,8 @@ def file_check(state):
         return "pdf"
     elif file_type == "html" or file_type =="htm":
         return "html"
+    elif file_type == "doc" or file_type == "DOCX" or file_type == "docx":
+        return "doc"
     else:
         return "other"
     
@@ -58,6 +105,13 @@ def process_pdf(state):
 def process_html(state):
     file_path = state["file_path"]
     text = extract_text_from_html(file_path)
+    state["extracted_text"] = text
+    return state
+
+def process_word(state):
+    print("Processing Word Document")
+    file_path = state["file_path"]
+    text = docx_to_text(file_path)
     state["extracted_text"] = text
     return state
 
@@ -142,14 +196,6 @@ def save_dataframe_to_excel(state):
         return state
 
     df = pd.DataFrame(rows)
-    print(df)
-
-    # ✅ Get output directory from environment variable
-    output_dir = os.getenv("INVOICES_OUTPUT_FOLDER", "backend/workflows/process_invoice/invoice_output")
-    os.makedirs(output_dir, exist_ok=True)
-
-    output_path = os.path.join(output_dir, "output.csv")
-
     expected_columns = [
         "vendor_name", "invoice_number", "invoice_date", "due_date", "currency",
         "net_amount", "tax_amount", "invoice_amount", "product_name", "product_code",
@@ -157,8 +203,12 @@ def save_dataframe_to_excel(state):
         "product_price", "file_name"
     ]
     df = df[[col for col in expected_columns if col in df.columns]]
+    print(df)
 
-    df.to_csv(output_path, index=False)
-    print("Saved to CSV:", output_path)
+    db_connector = Connect()
+    # THIS IS THE CRUCIAL CHANGE: Call the method to get the engine
+    engine = db_connector.zeus_automation_connection() 
+    
+    create_table_if_not_exists_and_insert(df, 'AI_invoice_automation', engine)
 
     return state

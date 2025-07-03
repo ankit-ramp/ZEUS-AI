@@ -15,9 +15,9 @@ from dotenv import load_dotenv
 import pandas as pd
 import re
 from tools.connection import Connect
-from sqlalchemy.engine import Engine
 from typing import Generator
 from fastapi import Depends, HTTPException, status
+from sqlalchemy.engine import Engine
 from langchain_openai import ChatOpenAI
 
 load_dotenv()

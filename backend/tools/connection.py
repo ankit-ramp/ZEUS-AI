@@ -27,6 +27,7 @@ class Connect:
         self.DataBaseBronze=os.getenv('DataBaseBronze')
         self.DataBaseSilver=os.getenv('DataBaseSilver')
         self.DataBaseGold=os.getenv('DataBaseGold')
+        self.DataBaseZeusAutomation = os.getenv('DataBaseZeusAutomation')
         print("constructor variable :")
         print(self.Server)
 
@@ -98,6 +99,31 @@ class Connect:
         )
 
         logging.debug("creating engine for gold connection")
+        logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
+        try:
+            engine = create_engine("mssql+pyodbc:///?odbc_connect=%s" % params)
+            return engine
+        except SQLAlchemyError as e:
+            logging.error("Error creating engine for gold connection")
+            raise ConnectionError("Connection build is failed gold connection") from e
+        
+    def zeus_automation_connection(self):
+        server = self.Server
+        driver = self.Driver
+        username = self.Username
+        password = self.Password
+        database = self.DataBaseZeusAutomation
+        params = urllib.parse.quote_plus(
+            f"DRIVER={driver};"
+            f"SERVER={server};"
+            f"UID={username};"
+            f"PWD={password};"
+            f"DATABASE={database};"
+            f"TrustServerCertificate=yes;"
+            
+        )
+
+        logging.debug("creating engine for zeus automation connection")
         logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
         try:
             engine = create_engine("mssql+pyodbc:///?odbc_connect=%s" % params)

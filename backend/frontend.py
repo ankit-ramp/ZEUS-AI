@@ -11,50 +11,44 @@ st.markdown("# 📄 <u>Document Processing App (PO/Invoice)</u>", unsafe_allow_h
 # --- Invoice Processing Section ---
 st.header("Invoice Processing")
 st.subheader("Upload Invoice Files")
-uploaded_invoice_files = st.file_uploader(
-    "Upload your invoice files (PDF, HTML)",
-    type=["pdf", "html", "htm"],
-    accept_multiple_files=True,
-    key="invoice_uploader" # Unique key for this uploader
-)
 
-if st.button("Process Invoices", key="process_invoices_button"): # Separate button for invoices
+uploaded_invoice_files = st.file_uploader(
+    "Upload your invoice files (PDF, HTML, DOC)",
+    type=["pdf", "html", "htm", "doc", "docx"],
+    accept_multiple_files=True,
+    key="invoice_uploader"
+)   
+
+if st.button("Process Invoices", key="process_invoices_button"):
     if not uploaded_invoice_files:
         st.warning("Please upload at least one invoice file to process.")
     else:
         with st.spinner("Processing invoice files..."):
             try:
-                # Prepare files for multipart/form-data request for invoices
                 files_to_send = []
                 for file in uploaded_invoice_files:
                     files_to_send.append(("files", (file.name, file.read(), file.type)))
 
-                # Make the POST request to your FastAPI backend for invoices
                 response = requests.post("http://127.0.0.1:8000/invoice", files=files_to_send)
-                response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                response.raise_for_status()
+                print(response)  
+                # Parse JSON response and load rows into DataFrame
+                result_json = response.json()
+                rows = result_json.get("rows", [])
 
-                csv_bytes = response.content  # Raw bytes of CSV file from the response
-
-                # Load CSV to DataFrame and display
-                df = pd.read_csv(BytesIO(csv_bytes))
-                st.success("✅ Invoice data extracted successfully!")
-                st.dataframe(df)
-
-                # Add a download button to let the user download the CSV file
-                st.download_button(
-                    label="Download Invoice Results CSV",
-                    data=csv_bytes,
-                    file_name="processed_invoices_results.csv",
-                    mime="text/csv",
-                    key="download_invoices_button"
-                )
+                if not rows:
+                    st.warning("No invoice line items found.")
+                else:
+                    df = pd.DataFrame(rows)
+                    st.success("✅ Invoice data extracted successfully!")
+                    st.dataframe(df)
 
             except requests.exceptions.RequestException as e:
                 st.error(f"❌ Invoice request failed: {e}")
                 if 'response' in locals() and response is not None:
-                    st.error(f"Server response: {response.text}") # Show detailed error from backend
+                    st.error(f"Server response: {response.text}")
             except Exception as e:
-                st.error(f"❌ Failed to process invoices or load CSV: {e}")
+                st.error(f"❌ Failed to process invoices or load response: {e}")
 
 st.markdown("---") # Separator for visual clarity
 
