@@ -24,3 +24,4 @@ class InvoiceResponse(BaseModel):
     tax_amount: Optional[float] = Field(default=None, description="Tax amount of the invoice, invoice_amount - net_amount")
     invoice_amount: Optional[float] = Field(default=None, description="Total amount of the invoice, net_amount + tax_amount")
     invoice_lines: Optional[List[Product]] = Field(default=None, description="Details of the product")
+    confidence: Optional[float] = Field(default=None, description="Confidence score of the extraction, between 0.0 and 1.0")

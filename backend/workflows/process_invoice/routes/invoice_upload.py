@@ -15,6 +15,7 @@ from sqlalchemy import text
 from process_invoice.services.invoice_logic import load_files
 from process_invoice.services.invoice_graph_instance import graph
 from dotenv import load_dotenv
+from workflows.process_invoice.services.logger import logger
 load_dotenv()
 
 router = APIRouter()
@@ -30,7 +31,7 @@ def clear_input_dir():
                 try:
                     os.remove(path)
                 except Exception as e:
-                    print(f"Failed to delete file {path}: {e}")
+                    logger.error(f"Failed to delete file {path}: {e}")
     else:
         os.makedirs(INPUT_DIR, exist_ok=True)
 
@@ -55,6 +56,7 @@ async def process_invoice(files: List[UploadFile] = File(...)):
         return result
 
     except Exception as e:
+        logger.error(e)
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:

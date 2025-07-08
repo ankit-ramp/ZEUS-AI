@@ -11,5 +11,4 @@ def docx_to_text(file_path):
     # Extract text from the document
     doc = Document(file_path)
     text = '\n'.join([para.text for para in doc.paragraphs])
-    print("the text is ----------->", text)
     return text

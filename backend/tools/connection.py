@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 load_dotenv()
 
-logging.basicConfig(filename="app.log",
+logging.basicConfig(filename="db.log",
                     filemode='a',
                     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
                     datefmt='%H:%M:%S',

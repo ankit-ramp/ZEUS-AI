@@ -1,4 +1,6 @@
 backend/.venv
+# Log files
+*.log
 backend/app.log
 backend/__pycache__/
 backend/tools/__pycache__

@@ -21,6 +21,7 @@ invoice_prompt_template = ChatPromptTemplate.from_messages([
             - `net_amount`: Total amount before tax.
             - `tax_amount`: Tax applied to the invoice.
             - `invoice_amount`: Total invoice value, which should equal `net_amount + tax_amount`.
+            - `confidence`: Confidence score of the extraction (float between 0.0 and 1.0).
 
         2. Extract an array of `invoice_lines`, each with the following fields:
             - `Product_name`: Full name of the product.
@@ -48,6 +49,7 @@ invoice_prompt_template = ChatPromptTemplate.from_messages([
             "net_amount": 950.00,
             "tax_amount": 190.00,
             "invoice_amount": 1140.00,
+            "confidence": 0.95,
             "invoice_lines": [
                 {{
                     "Product_name": "Biodegradable Bubble Wrap",
