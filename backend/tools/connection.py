@@ -7,11 +7,13 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 load_dotenv()
 
-logging.basicConfig(filename="db.log",
-                    filemode='a',
-                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-                    datefmt='%H:%M:%S',
-                    level=logging.DEBUG)
+logger_datalake = logging.getLogger("datalake_logger") # Get the specific named logger
+handler_datalake = logging.FileHandler("datalake.log")
+formatter_datalake = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+handler_datalake.setFormatter(formatter_datalake)
+logger_datalake.addHandler(handler_datalake)
+logger_datalake.setLevel(logging.DEBUG)
+logger_datalake.propagate = False 
 
 
 
@@ -29,7 +31,10 @@ class Connect:
         self.DataBaseGold=os.getenv('DataBaseGold')
         self.DataBaseZeusAutomation = os.getenv('DataBaseZeusAutomation')
         print("constructor variable :")
+        logger_datalake.info("constructor variable :")
         print(self.Server)
+        logger_datalake.info(self.Server)
+
 
         
 
@@ -49,13 +54,13 @@ class Connect:
             'TrustServerCertificate=yes;'
         )
         print(params)
-        logging.debug("creating engine for bronze connection")
-        logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
+        logger_datalake.debug("creating engine for bronze connection")
+        logger_datalake.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
         try:
             engine= create_engine("mssql+pyodbc:///?odbc_connect=%s" % params) 
             return engine
         except:
-            logging.error("Error creating engine for bronze connection")
+            logger_datalake.error("Error creating engine for bronze connection")
             return  {"code": 500, "message": "Connection build is failed bronze", "status": 'failed'}
     
     def silver_connection(self):
@@ -74,12 +79,12 @@ class Connect:
         )
      
         try:
-            logging.debug("creating engine for silver connection")
-            logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
+            logger_datalake.debug("creating engine for silver connection")
+            logger_datalake.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
             engine= create_engine("mssql+pyodbc:///?odbc_connect=%s" % params) 
             return engine
         except:
-            logging.error("Error creating engine for silver connection")
+            logger_datalake.error("Error creating engine for silver connection")
             return  {"code": 500, "message": "Connection build is failed silver connection", "status": 'failed'}
     
     def gold_connection(self):
@@ -98,13 +103,13 @@ class Connect:
             
         )
 
-        logging.debug("creating engine for gold connection")
-        logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
+        logger_datalake.debug("creating engine for gold connection")
+        logger_datalake.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
         try:
             engine = create_engine("mssql+pyodbc:///?odbc_connect=%s" % params)
             return engine
         except SQLAlchemyError as e:
-            logging.error("Error creating engine for gold connection")
+            logger_datalake.error("Error creating engine for gold connection")
             raise ConnectionError("Connection build is failed gold connection") from e
         
     def zeus_automation_connection(self):
@@ -123,11 +128,11 @@ class Connect:
             
         )
 
-        logging.debug("creating engine for zeus automation connection")
-        logging.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
+        logger_datalake.debug("creating engine for zeus automation connection")
+        logger_datalake.debug(f"Server: {server}, Driver: {driver}, Username: {username}, Password: {password}, Database: {database}")
         try:
             engine = create_engine("mssql+pyodbc:///?odbc_connect=%s" % params)
             return engine
         except SQLAlchemyError as e:
-            logging.error("Error creating engine for gold connection")
+            logger_datalake.error("Error creating engine for gold connection")
             raise ConnectionError("Connection build is failed gold connection") from e

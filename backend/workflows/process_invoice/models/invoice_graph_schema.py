@@ -11,9 +11,15 @@ class SimpleState(TypedDict):
     folder_path: str
     file_type: str
     file_path: str 
+    token: str
+    vendor: str
     extracted_text: str
-    llm_response: InvoiceResponse
-    rows: List[dict]
+    header: dict
+    invoice_lines:List[dict]
+    header_rows: dict
+    product_rows: List[dict]
+
+   
     
     
  

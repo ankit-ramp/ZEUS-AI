@@ -3,11 +3,12 @@ from tools.check_file_type import check_file_type
 from tools.pdf_to_text import extract_text_from_pdf
 from tools.html_to_text import extract_text_from_html
 from tools.word_to_text import docx_to_text
+import json
 from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 from langchain_google_genai import ChatGoogleGenerativeAI
-from process_invoice.models.invoice_graph_schema import SimpleState, InvoiceResponse
+from workflows.process_invoice.models.response_schema import VendorResponse, HeaderResponse, ProductResponse
 from langchain_core.messages import HumanMessage
-from process_invoice.services.invoice_prompt import invoice_prompt_template
+from process_invoice.services.vendor_prompt import get_vendor_prompt
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 import pandas as pd
@@ -16,9 +17,221 @@ from sqlalchemy.types import String, Integer, Float, DateTime
 from datetime import datetime
 from workflows.process_invoice.services.logger import logger
 from tools.connection import Connect
+from tools.dataverse_connection import Dataverse_read
+from workflows.process_invoice.services.crud import create_item, read_item
+from workflows.process_invoice.services.header_prompt import get_header_prompt
+from workflows.process_invoice.services.body_prompt import get_body_prompt
 
 import re
 load_dotenv()
+
+
+# def get_dataverse_token(state):
+#     dv = Dataverse_read()
+#     try:
+#         token = dv.get_token()
+#         state["token"] = token
+#         logger.info("successfully fetched token")
+#     except Exception as e:
+#         logger.error(f"Failed to =fetch token {e}")    
+#     return state
+    
+
+def vendor_llm(state):
+    pydantic_parser = PydanticToolsParser(tools=[VendorResponse])
+    text = state["extracted_text"]
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key= os.getenv("GOOGLE_API_KEY")
+        
+    )
+    vendor_prompt = get_vendor_prompt()
+    
+    first_responder_chain = vendor_prompt | llm.bind_tools( tools=[VendorResponse], tool_choice="VendorResponse") | pydantic_parser
+    response = first_responder_chain.invoke({
+        "messages": [HumanMessage(content= str(text))]
+    })
+
+    response = response[0].vendor_name
+    state["vendor"] = response
+    logger.info(f"successfull vendor response")
+    return state
+
+def header_llm(state):
+    vendor_name = state["vendor"]
+    try:
+        item = read_item(vendor_name)
+        if item is None and vendor_name != "general":
+            item = read_item("general")
+            logger.info("Fetched the general HEADER prompt")
+        else:
+            logger.info(f"Fetched the {vendor_name} HEADER prompt")    
+        header_prompt = get_header_prompt(item["header_prompt"])
+        pydantic_parser = PydanticToolsParser(tools=[HeaderResponse])
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY")
+        )
+        first_responder_chain = header_prompt | llm.bind_tools(tools=[HeaderResponse], tool_choice="HeaderResponse") | pydantic_parser
+        response = first_responder_chain.invoke({
+            "messages": [HumanMessage(content=str(state["extracted_text"]))]
+        })[0]
+        state["header"] = response
+    except Exception as e:
+        raise e
+    return state
+
+
+def body_llm(state):
+    vendor_name = state["vendor"]
+    try:
+        item = read_item(vendor_name)
+        if item is None and vendor_name != "general":
+            item = read_item("general")
+            logger.info("Fetched the general BODY prompt")
+
+        else:
+            logger.info(f"Fetched the {vendor_name} BODY prompt")       
+        body_prompt = get_body_prompt(item["body_prompt"])
+        pydantic_parser = PydanticToolsParser(tools=[ProductResponse])
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY")
+        )
+        first_responder_chain = body_prompt | llm.bind_tools(tools=[ProductResponse], tool_choice="ProductResponse") | pydantic_parser
+        response = first_responder_chain.invoke({
+            "messages": [HumanMessage(content=str(state["extracted_text"]))]
+        })
+        state["invoice_lines"] = response
+        logger.info("successfull body response")
+    except Exception as e:
+        logger.error(e)
+        raise e
+    return state
+
+def persist_invoice_data(state: dict) -> dict:
+    try:
+        vendor = state.get("vendor", "")
+        header = state.get("header", {})
+        invoice_lines = state.get("invoice_lines", [])
+
+        # Ensure persistent lists exist
+        if "header_rows" not in state or not isinstance(state["header_rows"], list):
+            state["header_rows"] = []
+        if "product_rows" not in state or not isinstance(state["product_rows"], list):
+            state["product_rows"] = []
+
+        # Convert header to dict if it's a Pydantic object
+        if hasattr(header, "dict"):
+            header = header.dict()
+
+        # Append header data with vendor
+        header_entry = header.copy()
+        # header_entry["zp_vendor"] = vendor
+        state["header_rows"].append(header_entry)
+
+        # Append product lines
+        for line in invoice_lines:
+            if hasattr(line, "dict"):
+                line = line.dict()
+            line_entry = line.copy()
+            line_entry["vendor"] = vendor
+            line_entry["invoice_number"] = header.get("invoice_number", "")
+            state["product_rows"].append(line_entry)
+
+        logger.info("Successfully pushed product_rows and header_rows")
+
+    except Exception as e:
+        print(e)
+        logger.error(f"persist_invoice_data error: {e}")
+        raise e
+
+    return state
+
+
+def push_data(state):
+    try:
+        dv = Dataverse_read()
+
+        header_data = state.get("header_rows")
+        product_data_list = state.get("product_rows", [])
+
+        if not header_data:
+            return {
+                "code": 400,
+                "message": "Missing header_data in state",
+                "data": None
+            }
+
+
+        # --- Fetch and bind currency GUID ---
+        currency_code = header_data[0].get("transactioncurrencyid")
+        if currency_code:
+            currency_guid = get_currency_guid_by_code(currency_code)
+            if not currency_guid:
+                return {
+                    "code": 400,
+                    "message": f"Currency '{currency_code}' not found in Dataverse",
+                    "data": None
+                }
+            # Inject only the bind reference, remove raw field
+            header_data[0]["transactioncurrencyid@odata.bind"] = f"/transactioncurrencies({currency_guid})"
+            if "transactioncurrencyid" in header_data[0]:
+                del header_data[0]["transactioncurrencyid"]
+
+        payload = header_data[0]
+        for key, value in payload.items():
+            if isinstance(value, str) and value == "":
+                payload[key] = None
+        # Debug: print payload
+        print("Payload to Dataverse:", json.dumps(header_data[0], indent=2))
+
+        # Push to Dataverse
+        header_result = dv.insert_records_into_dataverse("zp_invoices", header_data[0])
+        print(header_result)
+
+        if header_result.get("code") != 200:
+            return {
+                "code": header_result.get("code"),
+                "message": f"Header push failed: {header_result.get('message')}",
+                "data": header_result.get("data")
+            }
+
+
+        # header_guid = header_result["data"].get("your_header_guid_field")
+
+        # product_results = []
+        # for product in product_data_list:
+        #     # Optionally link product to header GUID
+        #     # product["header_reference"] = header_guid
+        #     result = dv.insert_records_into_dataverse("YourProductTableName", product)
+        #     product_results.append(result)
+
+        # return {
+        #     "code": 200,
+        #     "message": "Header and products pushed successfully",
+        #     "header_response": header_result,
+        #     "product_responses": product_results
+        # }
+
+    except Exception as e:
+        print(e)
+        return {
+            "code": 500,
+            "message": f"Unhandled exception in push_data: {str(e)}",
+            "data": None
+        }
+
+
+def get_currency_guid_by_code(currency_code):
+    dv = Dataverse_read()
+    table_with_query = f"transactioncurrencies?$filter=isocurrencycode eq '{currency_code}'&$select=transactioncurrencyid"
+    response = dv.read_dataverse(table_with_query)
+    if response.get("code") == 200 and response.get("data"):
+        return response["data"][0]["transactioncurrencyid"]
+    else:
+        return None
+
 
 def get_invoice_table_schema(table_name: str, metadata: MetaData):
     return Table(
@@ -67,11 +280,10 @@ def create_table_if_not_exists_and_insert(df: pd.DataFrame, table_name: str, eng
 def load_files(state):
     folder_path = os.getenv("INVOICES_INPUT_FOLDER", "backend/workflows/process_invoice/invoice_input")
     files = [f for f in os.listdir(folder_path)]
-    current_index_value = state.get("current_index", 0)
-    logger.info(f"successfully loaded files{files[current_index_value]}")
+    logger.info(f"successfully loaded files{files}")
     return {
         "file_list": files,
-        "current_index": current_index_value,
+        "current_index": 0,
         "folder_path": folder_path
     }
 
@@ -81,6 +293,7 @@ def process_current_file(state):
     index = state["current_index"]
     file_list = state["file_list"]
     file_name = file_list[index]
+    logger.info(f"Prcessing file {file_name}")
     file_path = state["folder_path"] + "/" +file_name
     file_type = check_file_type(file_name)
     state["file_path"] = file_path
@@ -132,23 +345,6 @@ def increment_index(state):
     return state
 
 
-def  llm_input(state):
-    
-    pydantic_parser = PydanticToolsParser(tools=[InvoiceResponse])
-    text = state["extracted_text"]
-    llm = ChatOpenAI(
-        model="gpt-4o",
-        temperature=0.0,
-        
-    )
-    invoice_prompt = invoice_prompt_template
-    first_responder_chain = invoice_prompt | llm.bind_tools( tools=[InvoiceResponse], tool_choice="InvoiceResponse") | pydantic_parser
-    response = first_responder_chain.invoke({
-        "messages": [HumanMessage(content= str(text))]
-    })
-    state["llm_response"] = response
-    logger.info(f"successfully llm response")
-    return state
 
 
 def check_continue(state):

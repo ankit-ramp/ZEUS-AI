@@ -17,7 +17,7 @@ uploaded_invoice_files = st.file_uploader(
     type=["pdf", "html", "htm", "doc", "docx"],
     accept_multiple_files=True,
     key="invoice_uploader"
-)   
+) 
 
 if st.button("Process Invoices", key="process_invoices_button"):
     if not uploaded_invoice_files:
@@ -31,24 +31,38 @@ if st.button("Process Invoices", key="process_invoices_button"):
 
                 response = requests.post("http://127.0.0.1:8000/invoice", files=files_to_send)
                 response.raise_for_status()
-                print(response)  
-                # Parse JSON response and load rows into DataFrame
+                
+                # --- MODIFIED SECTION ---
+                
+                # Parse the new JSON response format
                 result_json = response.json()
-                rows = result_json.get("rows", [])
+                header_rows = result_json.get("header_rows", [])
+                product_rows = result_json.get("product_rows", [])
 
-                if not rows:
-                    st.warning("No invoice line items found.")
+                if not header_rows and not product_rows:
+                    st.warning("No invoice data (header or line items) was found in the processed files.")
                 else:
-                    df = pd.DataFrame(rows)
                     st.success("✅ Invoice data extracted successfully!")
-                    st.dataframe(df)
 
+                    # Display the Header data
+                    if header_rows:
+                        st.subheader("Invoice Header")
+                        df_header = pd.DataFrame(header_rows)
+                        st.dataframe(df_header)
+
+                    # Display the Product/Line Items data
+                    if product_rows:
+                        st.subheader("Invoice Line Items")
+                        df_products = pd.DataFrame(product_rows)
+                        st.dataframe(df_products)
+                
             except requests.exceptions.RequestException as e:
                 st.error(f"❌ Invoice request failed: {e}")
                 if 'response' in locals() and response is not None:
                     st.error(f"Server response: {response.text}")
             except Exception as e:
                 st.error(f"❌ Failed to process invoices or load response: {e}")
+
 
 st.markdown("---") # Separator for visual clarity
 
