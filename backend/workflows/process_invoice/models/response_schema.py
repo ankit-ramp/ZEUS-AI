@@ -13,9 +13,10 @@ class VendorResponse(BaseModel):
 
 class HeaderResponse(BaseModel):
     """Information from pdf"""
-    zp_invoicenumber: Optional[str] = Field(default="", description="Unique invoice number")
-    zp_invoicedate: Optional[str] = Field(default= None, description="The date of the invoice generation")
-    zp_duedate: Optional[str] = Field(default= None, description="Date the invoice is due")
+    zp_name: Optional[str] = Field(default="", description="Unique invoice number")
+    zp_PurchaseOrder: Optional[str] = Field(default="", description= "Purchaseorder/ customer order no/ customer ref no, generally starts with A")
+    zp_invoicedate: Optional[str] = Field(default="", description="The date of the invoice generation")
+    zp_duedate: Optional[str] = Field(default="", description="Date the invoice is due")
     transactioncurrencyid: Optional[str] = Field(default="", description="Currency of the invoice, e.g. GBP, EUR")
     zp_netamount: Optional[float] = Field(default="", description="Net amount of the invoice, invoice_amount - tax_amount")
     zp_taxamount: Optional[float] = Field(default="", description="Tax amount of the invoice, invoice_amount - net_amount")

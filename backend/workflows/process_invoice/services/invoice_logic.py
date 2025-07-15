@@ -149,87 +149,192 @@ def persist_invoice_data(state: dict) -> dict:
     return state
 
 
+
 def push_data(state):
     try:
-        dv = Dataverse_read()
+        dv = Dataverse_read() # Assuming Dataverse_read() initializes your Dataverse client
 
-        header_data = state.get("header_rows")
-        product_data_list = state.get("product_rows", [])
+        header_data_list = state.get("header_rows")
+        product_data_list = state.get("product_rows", []) # Not directly used for header push
 
-        if not header_data:
+        if not header_data_list:
             return {
                 "code": 400,
-                "message": "Missing header_data in state",
+                "message": "Missing header_data in state. No invoice headers to process.",
                 "data": None
             }
 
+        all_header_results = []
 
-        # --- Fetch and bind currency GUID ---
-        currency_code = header_data[0].get("transactioncurrencyid")
-        if currency_code:
-            currency_guid = get_currency_guid_by_code(currency_code)
-            if not currency_guid:
+        # Loop through each header dictionary in the list
+        for i, current_header in enumerate(header_data_list):
+            print(f"Processing Header {i + 1}...")
+
+            # --- Currency Processing for the current header ---
+            original_currency_code = current_header.get("transactioncurrencyid") 
+            
+            # Remove any pre-existing bind property for currency to ensure clean state before setting
+            if "transactioncurrencyid@odata.bind" in current_header:
+                del current_header["transactioncurrencyid@odata.bind"]
+            
+            if original_currency_code: # Only attempt if a currency code is present
+                currency_guid = get_currency_guid_by_code(original_currency_code) # Your function to get GUID
+                
+                if currency_guid:
+                    # If GUID found, add bind property
+                    current_header["transactioncurrencyid@odata.bind"] = f"/transactioncurrencies({currency_guid})"
+                    # Remove the original raw string value field (e.g., "USD") if it was used for the lookup
+                    if "transactioncurrencyid" in current_header: # Check before deleting
+                        del current_header["transactioncurrencyid"] 
+                else:
+                    # If GUID not found, set the original field to None.
+                    # This will be serialized as 'null' in the final JSON payload to Dataverse.
+                    current_header["transactioncurrencyid"] = None
+                    print(f"Warning: Currency '{original_currency_code}' not found for Header {i+1}. Setting 'transactioncurrencyid' to null.")
+            else:
+                # If original_currency_code was already empty or None, ensure the field is explicitly None.
+                # This catches cases where 'transactioncurrencyid' might be present but empty string.
+                if "transactioncurrencyid" in current_header:
+                    current_header["transactioncurrencyid"] = None
+
+
+            original_vendor = state["vendor"]
+            print("original vendor ", original_vendor)
+            
+            # Remove any pre-existing bind property for currency to ensure clean state before setting
+            if "zp_VENDOR@odata.bind" in current_header:
+                del current_header["zp_VENDOR@odata.bind"]
+            
+            if original_vendor: # Only attempt if a currency code is present
+                vendor_guid = get_vendor_guid_by_name(original_vendor) # Your function to get GUID
+                print("vendor guid is", vendor_guid)
+                
+                if vendor_guid:
+                    # If GUID found, add bind property
+                    current_header["zp_VENDOR@odata.bind"] = f"/accounts({vendor_guid})"
+                    print(current_header)
+                    # Remove the original raw string value field (e.g., "USD") if it was used for the lookup
+                    if "zp_VENDOR" in current_header: # Check before deleting
+                        del current_header["zp_VENDOR"] 
+                else:
+                    # If GUID not found, set the original field to None.
+                    # This will be serialized as 'null' in the final JSON payload to Dataverse.
+                    current_header["zp_VENDOR"] = None
+                    print(f"Warning: vendor '{original_vendor}' not found for Header {i+1}. Setting vendor to null.")
+            else:
+                # If original_currency_code was already empty or None, ensure the field is explicitly None.
+                # This catches cases where 'transactioncurrencyid' might be present but empty string.
+                if "zp_VENDOR" in current_header:
+                    current_header["zp_VENDOR"] = None
+
+
+            purchaseOrder = current_header.get("zp_PurchaseOrder")
+            print("purchase order ", purchaseOrder)
+            
+            if "zp_PurchaseOrder@odata.bind" in current_header:
+                del current_header["zp_PurchaseOrder@odata.bind"]
+            
+            if original_vendor: # Only attempt if a currency code is present
+                purchaseOrder_guid = get_purchse_order_guid(str(purchaseOrder))  # Your function to get GUID
+                print("purchase order guid is", purchaseOrder_guid)
+                
+                if purchaseOrder_guid:
+                    # If GUID found, add bind property
+                    current_header["zp_PurchaseOrder@odata.bind"] = f"/zp_purchaseorder1s({purchaseOrder_guid})"
+                   
+                    if "zp_PurchaseOrder" in current_header: # Check before deleting
+                        del current_header["zp_PurchaseOrder"] 
+                else:
+                   
+                    current_header["zp_PurchaseOrder"] = None
+                    print(f"Warning: Purchase order '{purchaseOrder}' not found for Header {i+1}. Setting purchase order to null.")
+            else:
+                
+                if "zp_PurchaseOrder" in current_header:
+                    current_header["zp_PurchaseOrder"] = None
+
+
+
+
+            for key, value in current_header.items():
+                if isinstance(value, str) and value == "":
+                    current_header[key] = None
+
+            
+            print(f"Payload to Dataverse (Header {i + 1}):", json.dumps(current_header, indent=2))
+
+           
+            header_result = dv.insert_records_into_dataverse("zp_invoices", current_header)
+            all_header_results.append(header_result) 
+
+            print(f"Result for Header {i + 1}:", header_result)
+
+            
+            if header_result.get("code") != 200:
                 return {
-                    "code": 400,
-                    "message": f"Currency '{currency_code}' not found in Dataverse",
-                    "data": None
+                    "code": header_result.get("code"),
+                    "message": f"Header {i + 1} push failed: {header_result.get('message')}",
+                    "data": header_result.get("data")
                 }
-            # Inject only the bind reference, remove raw field
-            header_data[0]["transactioncurrencyid@odata.bind"] = f"/transactioncurrencies({currency_guid})"
-            if "transactioncurrencyid" in header_data[0]:
-                del header_data[0]["transactioncurrencyid"]
 
-        payload = header_data[0]
-        for key, value in payload.items():
-            if isinstance(value, str) and value == "":
-                payload[key] = None
-        # Debug: print payload
-        print("Payload to Dataverse:", json.dumps(header_data[0], indent=2))
-
-        # Push to Dataverse
-        header_result = dv.insert_records_into_dataverse("zp_invoices", header_data[0])
-        print(header_result)
-
-        if header_result.get("code") != 200:
-            return {
-                "code": header_result.get("code"),
-                "message": f"Header push failed: {header_result.get('message')}",
-                "data": header_result.get("data")
-            }
-
-
-        # header_guid = header_result["data"].get("your_header_guid_field")
-
-        # product_results = []
-        # for product in product_data_list:
-        #     # Optionally link product to header GUID
-        #     # product["header_reference"] = header_guid
-        #     result = dv.insert_records_into_dataverse("YourProductTableName", product)
-        #     product_results.append(result)
-
-        # return {
-        #     "code": 200,
-        #     "message": "Header and products pushed successfully",
-        #     "header_response": header_result,
-        #     "product_responses": product_results
-        # }
+        
+        return {
+            "code": 200,
+            "message": "All invoice headers processed and pushed successfully!",
+            "data": all_header_results 
+        }
 
     except Exception as e:
-        print(e)
+        # General exception handler for any unforeseen errors
+        print(f"An unexpected error occurred during invoice push: {e}") # Use f-string for better debugging
         return {
             "code": 500,
-            "message": f"Unhandled exception in push_data: {str(e)}",
+            "message": f"An unexpected error occurred during invoice push: {str(e)}",
             "data": None
         }
 
 
-def get_currency_guid_by_code(currency_code):
+def get_vendor_guid_by_name(vendor_name):
+    
     dv = Dataverse_read()
-    table_with_query = f"transactioncurrencies?$filter=isocurrencycode eq '{currency_code}'&$select=transactioncurrencyid"
-    response = dv.read_dataverse(table_with_query)
+    
+    response = dv.read_dataverse_withfilter("accounts", "name", vendor_name) 
+    
+    if response.get("code") == 200 and response.get("data"):
+        
+        return response["data"][0]["accountid"] 
+    else:
+         
+        return None
+
+
+
+def get_purchse_order_guid(purchseOrder):
+    print("entered purchase order guid")
+    dv = Dataverse_read()
+    
+    # Using the new read_dataverse_withfilter method
+    # Entity set for Accounts is 'accounts', filter column for name is 'name', select accountid
+    response = dv.read_dataverse_withfilter("zp_purchaseorder1s", "zp_newcolumn", purchseOrder) 
+    print(response)
+    if response.get("code") == 200 and response.get("data"):
+        # The GUID for an account (vendor) is in the 'accountid' field
+        return response["data"][0]["zp_purchaseorder1id"] 
+    else:
+         
+        return None
+
+def get_currency_guid_by_code(currency_code):
+
+    dv = Dataverse_read()
+    
+    # Using the new read_dataverse_withfilter method
+    response = dv.read_dataverse_withfilter("transactioncurrencies", "isocurrencycode", currency_code)
+    
     if response.get("code") == 200 and response.get("data"):
         return response["data"][0]["transactioncurrencyid"]
     else:
+        # The read_dataverse_withfilter already prints warnings/errors, so a simple return None is fine here.
         return None
 
 

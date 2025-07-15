@@ -51,6 +51,8 @@ async def process_invoice(files: List[UploadFile] = File(...)):
             saved_paths.append(file_path)
 
         # Step 3: Run the graph
+        ascii_graph = graph.get_graph().draw_ascii()
+        print(ascii_graph)
         result = graph.invoke({"file_list": ''}, {"recursion_limit": 8000})
 
         return result
