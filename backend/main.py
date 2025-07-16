@@ -30,7 +30,7 @@ def get_order_cache():
 
 from workflows.process_po.routers import download, health, upload
 from workflows.process_invoice.routes import invoice_upload
-
+from workflows.mail_draft.routes import draft_and_token
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,4 +79,5 @@ app.include_router(download.router)
 app.include_router(upload.router)
 app.include_router(health.router)
 app.include_router(invoice_upload.router)
+app.include_router(draft_and_token.router)
 
