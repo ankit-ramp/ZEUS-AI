@@ -40,11 +40,12 @@ load_dotenv()
 def vendor_llm(state):
     pydantic_parser = PydanticToolsParser(tools=[VendorResponse])
     text = state["extracted_text"]
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key= os.getenv("GOOGLE_API_KEY")
+    llm = ChatOpenAI(model_name="gpt-4o")
+    # llm = ChatGoogleGenerativeAI(
+    #     model="gemini-1.5-flash",
+    #     google_api_key= os.getenv("GOOGLE_API_KEY")
         
-    )
+    # )
     vendor_prompt = get_vendor_prompt()
     
     first_responder_chain = vendor_prompt | llm.bind_tools( tools=[VendorResponse], tool_choice="VendorResponse") | pydantic_parser
@@ -68,10 +69,11 @@ def header_llm(state):
             logger.info(f"Fetched the {vendor_name} HEADER prompt")    
         header_prompt = get_header_prompt(item["header_prompt"])
         pydantic_parser = PydanticToolsParser(tools=[HeaderResponse])
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY")
-        )
+        llm = ChatOpenAI(model_name="gpt-4o")
+        # llm = ChatGoogleGenerativeAI(
+        #     model="gemini-1.5-flash",
+        #     google_api_key=os.getenv("GOOGLE_API_KEY")
+        # )
         first_responder_chain = header_prompt | llm.bind_tools(tools=[HeaderResponse], tool_choice="HeaderResponse") | pydantic_parser
         response = first_responder_chain.invoke({
             "messages": [HumanMessage(content=str(state["extracted_text"]))]
@@ -94,10 +96,11 @@ def body_llm(state):
             logger.info(f"Fetched the {vendor_name} BODY prompt")       
         body_prompt = get_body_prompt(item["body_prompt"])
         pydantic_parser = PydanticToolsParser(tools=[ProductResponse])
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY")
-        )
+        llm = ChatOpenAI(model_name="gpt-4o")
+        # llm = ChatGoogleGenerativeAI(
+        #     model="gemini-1.5-flash",
+        #     google_api_key=os.getenv("GOOGLE_API_KEY")
+        # )
         first_responder_chain = body_prompt | llm.bind_tools(tools=[ProductResponse], tool_choice="ProductResponse") | pydantic_parser
         response = first_responder_chain.invoke({
             "messages": [HumanMessage(content=str(state["extracted_text"]))]
@@ -127,7 +130,7 @@ def persist_invoice_data(state: dict) -> dict:
 
         # Append header data with vendor
         header_entry = header.copy()
-        # header_entry["zp_vendor"] = vendor
+        header_entry["zp_vendor"] = vendor
         state["header_rows"].append(header_entry)
 
         # Append product lines
@@ -198,12 +201,12 @@ def push_data(state):
                     current_header["transactioncurrencyid"] = None
 
 
-            original_vendor = state["vendor"]
+            original_vendor = current_header.get("zp_vendor")
             print("original vendor ", original_vendor)
             
             # Remove any pre-existing bind property for currency to ensure clean state before setting
-            if "zp_VENDOR@odata.bind" in current_header:
-                del current_header["zp_VENDOR@odata.bind"]
+            if  "zp_vendor" in current_header:
+                del current_header["zp_vendor"]
             
             if original_vendor: # Only attempt if a currency code is present
                 vendor_guid = get_vendor_guid_by_name(original_vendor) # Your function to get GUID
@@ -231,6 +234,9 @@ def push_data(state):
             purchaseOrder = current_header.get("zp_PurchaseOrder")
             print("purchase order ", purchaseOrder)
             
+            if "zp_PurchaseOrder" in current_header:
+                del current_header["zp_PurchaseOrder"]
+                
             if "zp_PurchaseOrder@odata.bind" in current_header:
                 del current_header["zp_PurchaseOrder@odata.bind"]
             
