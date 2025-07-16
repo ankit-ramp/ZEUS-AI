@@ -86,6 +86,9 @@ def header_llm(state):
 
 def body_llm(state):
     vendor_name = state["vendor"]
+    zp_invoice = state["header"].zp_name
+    zp_account = state["vendor"]
+    
     try:
         item = read_item(vendor_name)
         if item is None and vendor_name != "general":
@@ -105,6 +108,12 @@ def body_llm(state):
         response = first_responder_chain.invoke({
             "messages": [HumanMessage(content=str(state["extracted_text"]))]
         })
+
+        if isinstance(response, list):
+            response = [item.dict() | {"zp_invoice": zp_invoice, "zp_account": zp_account} for item in response]
+        else:
+            logger.warning("Expected list of dicts, got something else")
+
         state["invoice_lines"] = response
         logger.info("successfull body response")
     except Exception as e:
@@ -138,8 +147,6 @@ def persist_invoice_data(state: dict) -> dict:
             if hasattr(line, "dict"):
                 line = line.dict()
             line_entry = line.copy()
-            line_entry["vendor"] = vendor
-            line_entry["invoice_number"] = header.get("invoice_number", "")
             state["product_rows"].append(line_entry)
 
         logger.info("Successfully pushed product_rows and header_rows")
@@ -158,7 +165,9 @@ def push_data(state):
         dv = Dataverse_read() # Assuming Dataverse_read() initializes your Dataverse client
 
         header_data_list = state.get("header_rows")
-        product_data_list = state.get("product_rows", []) # Not directly used for header push
+        product_data_list = state.get("product_rows")
+        print("product data list is -_____",product_data_list)
+        
 
         if not header_data_list:
             return {
@@ -167,7 +176,7 @@ def push_data(state):
                 "data": None
             }
 
-        all_header_results = []
+        
 
         # Loop through each header dictionary in the list
         for i, current_header in enumerate(header_data_list):
@@ -271,7 +280,7 @@ def push_data(state):
 
            
             header_result = dv.insert_records_into_dataverse("zp_invoices", current_header)
-            all_header_results.append(header_result) 
+           
 
             print(f"Result for Header {i + 1}:", header_result)
 
@@ -283,12 +292,61 @@ def push_data(state):
                     "data": header_result.get("data")
                 }
 
+        for i, current_invoice_line in enumerate(product_data_list):
+            print(f"Processing invoice line {i + 1}...")
+
+            zp_invoice = current_invoice_line.get("zp_invoice")
+            print("zp_invoice is",zp_invoice)
+
+            if "zp_invoice@odata.bind" in current_header:
+                del current_header["zp_invoice@odata.bind"]
+
+            if zp_invoice:
+
+                invoice_guid = get_invoice_guid(zp_invoice)
+                print("invoice guid is",invoice_guid)
+
+                # if invoice_guid:
+                    
+                #     current_header["zp_invoice@odata.bind"] = f"/transactioncurrencies({invoice_guid})"
+                   
+                #     if "transactioncurrencyid" in current_header: 
+                #         del current_header["transactioncurrencyid"] 
+                # else:
+                    
+                #     current_header["transactioncurrencyid"] = None
+                #     print(f"Warning: Currency '{original_currency_code}' not found for Header {i+1}. Setting 'transactioncurrencyid' to null.")
+  
+
+            else:
+                
+                if "zp_invoice" in current_header:
+                    current_header["zp_invoice"] = None      
+                
+            zp_account = current_invoice_line.get("zp_account")
+            print("zp_account is",zp_account)
+
+            if "zp_account@odata.bind" in current_header:
+                del current_header["zp_invoice@odata.bind"]
+
+            if zp_account:
+
+                account_guid = get_vendor_guid_by_name(zp_account)
+                print("account guid is", account_guid)
+
+                # if account_guid:
+                    
+                #     current_header["zp_account@odata.bind"] = f"/transactioncurrencies({invoice_guid})"
+                    
+                #     if "transactioncurrencyid" in current_header: # Check before deleting
+                #         del current_header["transactioncurrencyid"] 
+                # else:
+                #     # If GUID not found, set the original field to None.
+                #     # This will be serialized as 'null' in the final JSON payload to Dataverse.
+                #     current_header["transactioncurrencyid"] = None
+                #     print(f"Warning: Currency '{original_currency_code}' not found for Header {i+1}. Setting 'transactioncurrencyid' to null.")
         
-        return {
-            "code": 200,
-            "message": "All invoice headers processed and pushed successfully!",
-            "data": all_header_results 
-        }
+        return state
 
     except Exception as e:
         # General exception handler for any unforeseen errors
@@ -298,6 +356,20 @@ def push_data(state):
             "message": f"An unexpected error occurred during invoice push: {str(e)}",
             "data": None
         }
+
+
+
+def get_invoice_guid(invoice_number):
+    dv = Dataverse_read()
+    response = dv.read_dataverse_withfilter("zp_invoices", "zp_name", invoice_number) 
+    
+    if response.get("code") == 200 and response.get("data"):
+        
+        return response["data"][0]["zp_invoiceid"]
+    else:
+         
+        return None
+
 
 
 def get_vendor_guid_by_name(vendor_name):
@@ -471,71 +543,3 @@ def check_continue(state):
         return "end"
 
 
-def flatten_response(state):
-    response = state["llm_response"] 
-    response = dict(response[0])  
-    file_list = state["file_list"]
-    current_index = state["current_index"]
-    file_name = file_list[current_index]
-    vendor_name = response.get("vendor_name")
-    invoice_number = response.get("invoice_number")
-    invoice_date = response.get("invoice_date")
-    due_date = response.get("due_date")
-    currency = response.get("currency")
-    net_amount = response.get("net_amount")
-    tax_amount = response.get("tax_amount")
-    invoice_amount = response.get("invoice_amount")
-    confidence = response.get("confidence", 0.0)
-    print(confidence)
-
-    new_rows = [
-            {
-                **product.dict(),
-                "vendor_name": vendor_name,
-                "invoice_number": invoice_number,
-                "invoice_date": invoice_date,
-                "due_date": due_date,
-                "currency": currency,
-                "net_amount": net_amount,
-                "tax_amount": tax_amount,
-                "invoice_amount": invoice_amount,
-                "file_name": file_name,
-                "confidence": confidence
-
-            }
-            for product in response["invoice_lines"]
-        ]
-
-    if "rows" in state:
-        state["rows"].extend(new_rows)
-    else:
-        state["rows"] = new_rows
-
-    logger.info(f"Successfully row conversion from flatten response")
-    return state
-
-
-def save_dataframe_to_excel(state):
-    rows = state.get("rows", [])
-    if not rows:
-        print("No rows to save.")
-        return state
-
-    df = pd.DataFrame(rows)
-    expected_columns = [
-        "vendor_name", "invoice_number", "invoice_date", "due_date", "currency",
-        "net_amount", "tax_amount", "invoice_amount", "product_name", "product_code",
-        "product_description", "product_quantity", "product_unit_price",
-        "product_price", "file_name", "confidence"
-    ]
-    df = df[[col for col in expected_columns if col in df.columns]]
-    logger.info("successfull df creation now pushing to sql")
-
-    db_connector = Connect()
-    # THIS IS THE CRUCIAL CHANGE: Call the method to get the engine
-    engine = db_connector.zeus_automation_connection() 
-    
-    create_table_if_not_exists_and_insert(df, 'AI_invoice_automation', engine)
-    logger.info("successfull push to sql")
-
-    return state
