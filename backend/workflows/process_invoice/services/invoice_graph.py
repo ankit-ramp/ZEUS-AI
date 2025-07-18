@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from process_invoice.models.invoice_graph_schema import SimpleState, InvoiceResponse
-from process_invoice.services.invoice_logic import load_files, process_current_file, file_check, process_pdf, process_html, increment_index, check_continue, process_word,  vendor_llm, header_llm, body_llm, persist_invoice_data, push_data
+from process_invoice.services.invoice_logic import load_files, process_current_file, file_check, process_pdf, process_html, increment_index, check_continue, process_word,  vendor_llm, header_llm, body_llm, persist_invoice_data, push_data, push_invoice_lines
 
 
 def build_graph() -> StateGraph:
@@ -23,6 +23,7 @@ def build_graph() -> StateGraph:
     builder.add_node("body_llm", body_llm)
     builder.add_node("generate_rows", persist_invoice_data)
     builder.add_node("push_data", push_data )
+    builder.add_node("push_product", push_invoice_lines)
 
 
     # builder.add_edge("Token", "load_files")    
@@ -44,7 +45,8 @@ def build_graph() -> StateGraph:
         "loop": "process_file",
         "end": "push_data"
     })
-    builder.add_edge("push_data", END)
+    builder.add_edge("push_data", "push_product")
+    builder.add_edge("push_product", END)
 
 
 

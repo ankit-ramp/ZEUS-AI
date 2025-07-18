@@ -165,8 +165,6 @@ def push_data(state):
         dv = Dataverse_read() # Assuming Dataverse_read() initializes your Dataverse client
 
         header_data_list = state.get("header_rows")
-        product_data_list = state.get("product_rows")
-        print("product data list is -_____",product_data_list)
         
 
         if not header_data_list:
@@ -178,7 +176,7 @@ def push_data(state):
 
         
 
-        # Loop through each header dictionary in the list
+        
         for i, current_header in enumerate(header_data_list):
             print(f"Processing Header {i + 1}...")
 
@@ -291,60 +289,6 @@ def push_data(state):
                     "message": f"Header {i + 1} push failed: {header_result.get('message')}",
                     "data": header_result.get("data")
                 }
-
-        for i, current_invoice_line in enumerate(product_data_list):
-            print(f"Processing invoice line {i + 1}...")
-
-            zp_invoice = current_invoice_line.get("zp_invoice")
-            print("zp_invoice is",zp_invoice)
-
-            if "zp_invoice@odata.bind" in current_header:
-                del current_header["zp_invoice@odata.bind"]
-
-            if zp_invoice:
-
-                invoice_guid = get_invoice_guid(zp_invoice)
-                print("invoice guid is",invoice_guid)
-
-                # if invoice_guid:
-                    
-                #     current_header["zp_invoice@odata.bind"] = f"/transactioncurrencies({invoice_guid})"
-                   
-                #     if "transactioncurrencyid" in current_header: 
-                #         del current_header["transactioncurrencyid"] 
-                # else:
-                    
-                #     current_header["transactioncurrencyid"] = None
-                #     print(f"Warning: Currency '{original_currency_code}' not found for Header {i+1}. Setting 'transactioncurrencyid' to null.")
-  
-
-            else:
-                
-                if "zp_invoice" in current_header:
-                    current_header["zp_invoice"] = None      
-                
-            zp_account = current_invoice_line.get("zp_account")
-            print("zp_account is",zp_account)
-
-            if "zp_account@odata.bind" in current_header:
-                del current_header["zp_invoice@odata.bind"]
-
-            if zp_account:
-
-                account_guid = get_vendor_guid_by_name(zp_account)
-                print("account guid is", account_guid)
-
-                # if account_guid:
-                    
-                #     current_header["zp_account@odata.bind"] = f"/transactioncurrencies({invoice_guid})"
-                    
-                #     if "transactioncurrencyid" in current_header: # Check before deleting
-                #         del current_header["transactioncurrencyid"] 
-                # else:
-                #     # If GUID not found, set the original field to None.
-                #     # This will be serialized as 'null' in the final JSON payload to Dataverse.
-                #     current_header["transactioncurrencyid"] = None
-                #     print(f"Warning: Currency '{original_currency_code}' not found for Header {i+1}. Setting 'transactioncurrencyid' to null.")
         
         return state
 
@@ -358,6 +302,82 @@ def push_data(state):
         }
 
 
+def push_invoice_lines(state):
+
+    dv = Dataverse_read() # Assuming Dataverse_read() initializes your Dataverse client
+
+    product_data_list = state.get("product_rows")
+
+    if not product_data_list:
+            return {
+                "code": 400,
+                "message": "Missing product_data in state. No invoice headers to process.",
+                "data": None
+            }
+
+
+
+    for i, current_invoice_line in enumerate(product_data_list):
+            print(f"Processing product line {i + 1}...")
+            print("product lis is", product_data_list)
+
+            zp_invoice = current_invoice_line.get("zp_invoice")
+            print("zp_invoice is", zp_invoice)
+
+            if zp_invoice: 
+                print("deleting zp_invoice")
+                del current_invoice_line["zp_invoice"]
+                print("after deletion", current_invoice_line)
+                invoice_guid = get_invoice_guid(zp_invoice)
+                print("invoice guid is", invoice_guid)
+
+                if invoice_guid:
+                    current_invoice_line["zp_Invoice@odata.bind"] = f"/zp_invoices({invoice_guid})"
+                    print("after odata update", current_invoice_line)
+                else:
+                    # Don't include zp_invoice if lookup fails
+                    print("why run")
+                    current_invoice_line.pop("zp_invoice", None)
+            else:
+                # Don't include zp_invoice if not provided
+                print("no invoice no found")
+                current_invoice_line.pop("zp_invoice", None)
+
+                
+            
+            zp_account = current_invoice_line.get("zp_account")
+            print("zp_account is", zp_account)
+
+            if zp_account: 
+                account_guid = get_vendor_guid_by_name(zp_account)
+                print("Account guid is", account_guid)
+
+                if account_guid:
+                    current_invoice_line["zp_Account@odata.bind"] = f"/accounts({account_guid})"
+                
+                    current_invoice_line.pop("zp_account", None)
+            else:
+                # Don't include zp_invoice if not provided
+                print("no account found")
+                current_invoice_line.pop("zp_account", None)
+
+
+            
+
+            print(f"Payload to Dataverse (product {i + 1}):", json.dumps(current_invoice_line, indent=2))
+
+            
+            product_result = dv.insert_records_into_dataverse("zp_invoicelines", current_invoice_line)
+
+            print(f"Result for product {i + 1}:", product_result)
+
+            if product_result.get("code") != 200:
+                return {
+                    "code": product_result.get("code"),
+                    "message": f"Product line {i + 1} push failed: {product_result.get('message')}",
+                    "data": product_result.get("data")
+                }
+        
 
 def get_invoice_guid(invoice_number):
     dv = Dataverse_read()

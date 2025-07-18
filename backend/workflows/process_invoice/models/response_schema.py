@@ -25,9 +25,10 @@ class HeaderResponse(BaseModel):
 
 class ProductResponse(BaseModel):
     """Information from pdf"""
-    product_name: Optional[str] = Field(default="", description="Name of the product")
-    product_code: Optional[str] = Field(default="", description="Unique code of the product")
-    product_description: Optional[str] = Field(default="", description="Description of the product")
-    product_quantity: Optional[int] = Field(default="", description="Quantity of the product")
-    product_unit_price: Optional[float] = Field(default="", description="Unit price of the product")
-    product_price: Optional[float] = Field(default="", description="Total price of the product, product_quantity * product_unit_price")
+    zp_productx: Optional[str] = Field(default=None, description="Name of the product dont include quantity like kg no etc") #zp_productx
+    # product_code: Optional[str] = Field(default="", description="Unique code of the product")
+    zp_description: Optional[str] = Field(default=None, description="Description of the product") #zp_description
+    zp_quantity: Optional[int] = Field(default=None, description="Quantity of the product") #zp_quantity
+    zp_unitprice: Optional[float] = Field(default=None, description="Unit price of the product") #zp_unitprice
+    zp_lineamount: Optional[float] = Field(default=None, description="Total price of the product, product_quantity * product_unit_price") #zp_lineamount
+    zp_taxamount: Optional[float] = Field(default=None, description= "Taxed amount on the product ") #zp_taxamount
